@@ -15,6 +15,7 @@
   margin: 0;
   padding: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 1.1rem; /* Base font size increased */
 }
 
 body {
@@ -29,7 +30,7 @@ body {
 
 #root {
   width: 100%;
-  max-width: 800px;
+  max-width: 1000px; /* Made the container wider */
 }
 
 .glass-card {
@@ -37,10 +38,10 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
-  border-radius: 1.5rem;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  margin-bottom: 2rem;
+  border-radius: 2rem; /* More rounded */
+  padding: 2rem; /* More padding */
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+  margin-bottom: 2.5rem;
 }
 
 .gradient-text {
@@ -52,9 +53,10 @@ button {
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
-  border-radius: 0.75rem;
-  padding: 0.75rem 1.5rem;
-  font-weight: 600;
+  border-radius: 1rem;
+  padding: 1rem 2rem; /* Larger buttons */
+  font-weight: 700;
+  font-size: 1.1rem;
 }
 
 .btn-primary {
@@ -95,10 +97,11 @@ input, select {
   width: 100%;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--glass-border);
-  border-radius: 0.75rem;
-  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  padding: 1rem 1.2rem; /* Larger inputs */
   color: white;
   outline: none;
+  font-size: 1.1rem;
 }
 
 input:focus {
@@ -118,8 +121,9 @@ input:focus {
 }
 
 .amount {
-  font-weight: 700;
+  font-weight: 800;
   color: var(--success);
+  font-size: 1.3rem;
 }
 
 .negative {
@@ -192,4 +196,67 @@ input:focus {
   width: 100%;
   max-width: 400px;
   padding: 3rem 2rem;
+}
+
+.group-selector {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 1rem 0;
+  margin-top: 2rem;
+}
+
+.group-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  padding: 0.8rem 1.5rem;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.group-tab.active {
+  background: white;
+  color: black;
+  border-color: white;
+}
+
+.delete-group-icon {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.delete-group-icon:hover {
+  opacity: 1;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2.5rem;
+}
+
+.chart-placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.fake-chart {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 1.5rem;
+  padding: 2rem;
+  flex: 1;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }

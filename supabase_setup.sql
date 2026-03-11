@@ -1,7 +1,14 @@
+-- Crear tabla de grupos
+CREATE TABLE groups (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
 -- Crear tabla de amigos
 CREATE TABLE friends (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL,
+    group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 -- Crear tabla de gastos
@@ -11,6 +18,7 @@ CREATE TABLE expenses (
     amount DECIMAL(10, 2) NOT NULL,
     paid_by UUID REFERENCES friends(id) ON DELETE
     SET NULL,
+        group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
         created_at TIMESTAMPTZ DEFAULT now()
 );
 -- Crear tabla de repartición (splits)
