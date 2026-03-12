@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight } from 'lucide-react'
+import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight, LogOut } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import Auth from './components/Auth'
 import './App.css'
 
 const formatDate = (dateString) => {
@@ -14,7 +15,7 @@ const formatDate = (dateString) => {
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [session, setSession] = useState(null)
   const [groups, setGroups] = useState([])
   const [currentGroupId, setCurrentGroupId] = useState(null)
   const [showAddGroup, setShowAddGroup] = useState(false)
@@ -30,10 +31,30 @@ function App() {
     split_with: []
   })
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   async function fetchData() {
+    if (!session?.user) return
     setLoading(true)
     
-    const { data: groupsData } = await supabase.from('groups').select('*').order('created_at', { ascending: false })
+    const { data: groupsData } = await supabase
+      .from('groups')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false })
+      
     setGroups(groupsData || [])
 
     if (groupsData?.length > 0 && !currentGroupId) {
@@ -57,13 +78,19 @@ function App() {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [currentGroupId])
+    if (session) {
+      fetchData()
+    }
+  }, [currentGroupId, session])
 
   async function addGroup(e) {
     e.preventDefault()
-    if (!newGroupName) return
-    const { data, error } = await supabase.from('groups').insert([{ name: newGroupName }]).select()
+    if (!newGroupName || !session?.user) return
+    const { data, error } = await supabase
+      .from('groups')
+      .insert([{ name: newGroupName, user_id: session.user.id }])
+      .select()
+      
     if (!error) {
       setGroups([data[0], ...groups])
       setCurrentGroupId(data[0].id)
@@ -181,46 +208,26 @@ function App() {
     }
   }, [loading, friends, expenses])
 
-  if (!isLoggedIn) {
-    return (
-      <div className="login-container animate-fade">
-        <div className="glass-card login-card">
-          <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <h1 className="gradient-text" style={{ fontSize: '2.5rem' }}>Bienvenido</h1>
-            <p style={{ color: 'var(--text-muted)' }}>Inicia sesión para gestionar tus gastos</p>
-          </header>
-          
-          <form onSubmit={(e) => { e.preventDefault(); setIsLoggedIn(true); }}>
-            <div className="input-group">
-              <label>Email</label>
-              <input type="email" placeholder="tu@email.com" />
-            </div>
-            <div className="input-group">
-              <label>Contraseña</label>
-              <input type="password" placeholder="••••••••" />
-            </div>
-            <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem', padding: '1rem' }}>
-              Entrar
-            </button>
-          </form>
-          
-          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            ¿No tienes cuenta? <span style={{ color: 'white', cursor: 'pointer' }}>Regístrate</span>
-          </p>
-        </div>
-      </div>
-    )
+  if (!session) {
+    return <Auth />
+  }
+
+  const handleLogout = () => {
+    supabase.auth.signOut()
+    setCurrentGroupId(null)
+    setGroups([])
   }
 
   return (
     <div className="App">
-      <div style={{ position: 'absolute', top: '1rem', right: '1rem' }}>
+      <div style={{ position: 'absolute', top: '1rem', right: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{session.user.email}</span>
         <button 
-          onClick={() => setIsLoggedIn(false)}
+          onClick={handleLogout}
           className="btn-secondary" 
-          style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+          style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
-          Cerrar Sesión
+          <LogOut size={14} /> Salir
         </button>
       </div>
 

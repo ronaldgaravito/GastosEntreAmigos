@@ -260,3 +260,55 @@ input:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Auth related styles */
+.auth-toggle {
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: underline;
+  transition: opacity 0.2s;
+}
+
+.auth-toggle:hover {
+  opacity: 0.8;
+}
+
+.auth-message {
+  padding: 1rem;
+  border-radius: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.auth-message.success {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+.auth-message.error {
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  color: #ff8888;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

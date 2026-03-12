@@ -2,6 +2,7 @@
 CREATE TABLE groups (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 -- Crear tabla de amigos
