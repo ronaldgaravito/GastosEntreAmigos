@@ -1,14 +1,24 @@
 import { useState, useEffect } from 'react'
-import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight, LogOut } from 'lucide-react'
+import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight, LogOut, Utensils, Car, Home, Beer, ShoppingBag, Tag, Download, PieChart as PieChartIcon } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { supabase } from './lib/supabase'
 import Auth from './components/Auth'
 import './App.css'
+
+const CATEGORIES = {
+  'Comida': { icon: <Utensils size={16} />, color: '#FF6B6B' },
+  'Transporte': { icon: <Car size={16} />, color: '#4D96FF' },
+  'Alojamiento': { icon: <Home size={16} />, color: '#6BCB77' },
+  'Entretenimiento': { icon: <Beer size={16} />, color: '#FFD93D' },
+  'Compras': { icon: <ShoppingBag size={16} />, color: '#9D50BB' },
+  'Otros': { icon: <Tag size={16} />, color: '#666666' }
+}
 
 const formatDate = (dateString) => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('es-ES', { 
     day: 'numeric', 
-    month: 'long', 
+    month: 'short', 
     hour: '2-digit', 
     minute: '2-digit' 
   }).format(date);
@@ -28,6 +38,7 @@ function App() {
     description: '',
     amount: '',
     paid_by: '',
+    category: 'Otros',
     split_with: []
   })
 
@@ -134,7 +145,7 @@ function App() {
 
   async function handleAddExpense(e) {
     e.preventDefault()
-    const { description, amount, paid_by, split_with } = newExpense
+    const { description, amount, paid_by, category, split_with } = newExpense
     
     if (!description || !amount || !paid_by || split_with.length === 0) {
       alert('Por favor rellena todos los campos')
@@ -147,6 +158,7 @@ function App() {
         description, 
         amount: parseFloat(amount), 
         paid_by, 
+        category,
         group_id: currentGroupId 
       }])
       .select()
@@ -171,9 +183,57 @@ function App() {
       alert('Error creando repartición')
     } else {
       setShowAddExpense(false)
-      setNewExpense({ description: '', amount: '', paid_by: '', split_with: [] })
+      setNewExpense({ description: '', amount: '', paid_by: '', category: 'Otros', split_with: [] })
       fetchData()
     }
+  }
+
+  const [suggestedSettlements, setSuggestedSettlements] = useState([])
+
+  function simplifyDebts(balances) {
+    let debtors = balances.filter(b => b.amount < -0.01).map(b => ({ ...b, amount: Math.abs(b.amount) })).sort((a, b) => b.amount - a.amount);
+    let creditors = balances.filter(b => b.amount > 0.01).map(b => ({ ...b })).sort((a, b) => b.amount - a.amount);
+    
+    const transactions = [];
+    let i = 0, j = 0;
+
+    while (i < debtors.length && j < creditors.length) {
+      const amount = Math.min(debtors[i].amount, creditors[j].amount);
+      transactions.push({
+        from: debtors[i].name,
+        to: creditors[j].name,
+        amount: amount
+      });
+
+      debtors[i].amount -= amount;
+      creditors[j].amount -= amount;
+
+      if (debtors[i].amount < 0.01) i++;
+      if (creditors[j].amount < 0.01) j++;
+    }
+    return transactions;
+  }
+
+  const exportToCSV = () => {
+    const headers = ['Fecha', 'Descripción', 'Categoría', 'Pagador', 'Monto'];
+    const rows = expenses.map(exp => [
+      new Date(exp.created_at).toLocaleDateString(),
+      exp.description,
+      exp.category || 'Otros',
+      exp.paid_by?.name || '?',
+      exp.amount
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `gastos_${new Date().getTime()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   async function calculateBalances() {
@@ -202,11 +262,20 @@ function App() {
 
   useEffect(() => {
     if (!loading && friends.length > 0) {
-      calculateBalances().then(setBalanceList)
+      calculateBalances().then(list => {
+        setBalanceList(list)
+        setSuggestedSettlements(simplifyDebts(list))
+      })
     } else {
       setBalanceList([])
+      setSuggestedSettlements([])
     }
   }, [loading, friends, expenses])
+
+  const categoryData = Object.keys(CATEGORIES).map(cat => ({
+    name: cat,
+    value: expenses.filter(e => e.category === cat).reduce((acc, curr) => acc + parseFloat(curr.amount), 0)
+  })).filter(d => d.value > 0);
 
   if (!session) {
     return <Auth />
@@ -266,22 +335,57 @@ function App() {
       {currentGroupId ? (
         <>
           <div className="dashboard-grid">
-            <div className="glass-card chart-placeholder">
-              <h3><Calculator size={20} /> Resumen Visual</h3>
-              <div className="fake-chart">
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', height: '150px', justifyContent: 'center' }}>
-                  {balanceList.map((b, i) => (
-                    <div key={i} style={{ 
-                      width: '30px', 
-                      height: `${Math.min(Math.abs(b.amount) * 2, 100)}%`, 
-                      background: b.amount >= 0 ? '#ffffff' : '#333333',
-                      borderRadius: '0.5rem 0.5rem 0 0'
-                    }}></div>
-                  ))}
-                </div>
-                <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Visualización de balances por amigo (Blanco: Le deben, Gris: Debe)
-                </p>
+            <div className="glass-card chart-container" style={{ minHeight: '350px' }}>
+              <h3><PieChartIcon size={20} /> Gastos por Categoría</h3>
+              <div style={{ width: '100%', height: '250px' }}>
+                {categoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CATEGORIES[entry.name]?.color || '#8884d8'} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend verticalAlign="bottom" height={36}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-muted)' }}>Añade gastos para ver estadísticas</p>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-card chart-container" style={{ minHeight: '350px' }}>
+              <h3><Calculator size={20} /> Balances Netos</h3>
+              <div style={{ width: '100%', height: '250px' }}>
+                {balanceList.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={balanceList}>
+                      <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} />
+                      <YAxis stroke="var(--text-muted)" fontSize={12} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px' }}
+                        itemStyle={{ color: '#fff' }}
+                      />
+                      <Bar dataKey="amount" fill="#ffffff" radius={[4, 4, 0, 0]}>
+                        {balanceList.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.amount >= 0 ? '#ffffff' : '#444444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-muted)' }}>No hay balances para mostrar</p>
+                )}
               </div>
             </div>
 
@@ -301,9 +405,14 @@ function App() {
           <div className="glass-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h2><History size={20} /> Historial</h2>
-              <button className="btn-primary" onClick={() => setShowAddExpense(true)}>
-                <Plus size={20} /> Nuevo Gasto
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="btn-secondary" onClick={exportToCSV} title="Exportar CSV">
+                  <Download size={18} />
+                </button>
+                <button className="btn-primary" onClick={() => setShowAddExpense(true)}>
+                  <Plus size={20} /> Nuevo Gasto
+                </button>
+              </div>
             </div>
 
             {loading ? (
@@ -313,10 +422,13 @@ function App() {
             ) : (
               expenses.map(exp => (
                 <div key={exp.id} className="expense-item animate-fade">
+                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '1rem' }}>
+                    {CATEGORIES[exp.category]?.icon || <Tag size={16} />}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <strong style={{ fontSize: '1.2rem' }}>{exp.description}</strong>
-                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Calendar size={14} /> {formatDate(exp.created_at)} • Pagado por: {exp.paid_by?.name || 'Desconocido'}
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Calendar size={12} /> {formatDate(exp.created_at)} • Pagado por: {exp.paid_by?.name || 'Desconocido'}
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -328,6 +440,24 @@ function App() {
                       <Trash2 size={16} />
                     </button>
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="glass-card">
+
+            <h2><Calculator size={20} /> Liquidaciones Sugeridas</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Forma más eficiente de saldar todas las deudas</p>
+            {suggestedSettlements.length === 0 ? (
+              <p style={{ textAlign: 'center', color: '#6BCB77', fontWeight: 'bold' }}>¡Todo saldado! 🎉</p>
+            ) : (
+              suggestedSettlements.map((s, i) => (
+                <div key={i} className="expense-item animate-fade" style={{ borderLeft: '4px solid #4D96FF' }}>
+                  <div style={{ flex: 1 }}>
+                    <strong>{s.from}</strong> <span style={{ color: 'var(--text-muted)' }}>debe pagar a</span> <strong>{s.to}</strong>
+                  </div>
+                  <div className="amount" style={{ color: '#4D96FF' }}>${s.amount.toFixed(2)}</div>
                 </div>
               ))
             )}
@@ -400,6 +530,33 @@ function App() {
                   <option value="">Selecciona...</option>
                   {friends.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </select>
+              </div>
+
+              <div className="input-group">
+                <label>Categoría</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                  {Object.keys(CATEGORIES).map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`btn-secondary ${newExpense.category === cat ? 'active' : ''}`}
+                      onClick={() => setNewExpense({...newExpense, category: cat})}
+                      style={{ 
+                        fontSize: '0.7rem', 
+                        padding: '0.5rem', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        gap: '0.3rem',
+                        borderColor: newExpense.category === cat ? CATEGORIES[cat].color : 'transparent',
+                        background: newExpense.category === cat ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)'
+                      }}
+                    >
+                      {CATEGORIES[cat].icon}
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               <div className="input-group">

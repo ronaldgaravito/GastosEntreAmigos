@@ -241,18 +241,15 @@ input:focus {
   margin-bottom: 2.5rem;
 }
 
-.chart-placeholder {
+.chart-container {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  background: var(--card-bg);
 }
 
-.fake-chart {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 1.5rem;
-  padding: 2rem;
-  flex: 1;
-  margin-top: 1rem;
+.btn-secondary.active {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: #ffffff;
 }
 
 @media (max-width: 768px) {

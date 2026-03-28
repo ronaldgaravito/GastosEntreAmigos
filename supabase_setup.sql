@@ -20,6 +20,7 @@ CREATE TABLE expenses (
     paid_by UUID REFERENCES friends(id) ON DELETE
     SET NULL,
         group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+        category TEXT DEFAULT 'Otros',
         created_at TIMESTAMPTZ DEFAULT now()
 );
 -- Crear tabla de repartición (splits)
