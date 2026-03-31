@@ -31,3 +31,32 @@ CREATE TABLE expense_splits (
     amount DECIMAL(10, 2) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- ========= POLÍTICAS DE SEGURIDAD (RLS) =========
+-- Habilitar RLS en las tablas
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expense_splits ENABLE ROW LEVEL SECURITY;
+
+-- Políticas para groups: El usuario solo ve los grupos que él creó
+CREATE POLICY "Manage own groups" ON groups FOR ALL USING (auth.uid() = user_id);
+
+-- Políticas para friends: El usuario puede gestionar amigos de sus grupos
+CREATE POLICY "Manage friends in own groups" ON friends FOR ALL USING (
+    EXISTS (SELECT 1 FROM groups WHERE groups.id = friends.group_id AND groups.user_id = auth.uid())
+);
+
+-- Políticas para expenses: El usuario puede gestionar gastos de sus grupos
+CREATE POLICY "Manage expenses in own groups" ON expenses FOR ALL USING (
+    EXISTS (SELECT 1 FROM groups WHERE groups.id = expenses.group_id AND groups.user_id = auth.uid())
+);
+
+-- Políticas para expense_splits: El usuario puede gestionar reparticiones de sus gastos
+CREATE POLICY "Manage splits in own groups" ON expense_splits FOR ALL USING (
+    EXISTS (
+        SELECT 1 FROM expenses 
+        JOIN groups ON expenses.group_id = groups.id 
+        WHERE expenses.id = expense_splits.expense_id AND groups.user_id = auth.uid()
+    )
+);

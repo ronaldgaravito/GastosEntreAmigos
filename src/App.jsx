@@ -102,7 +102,9 @@ function App() {
       .insert([{ name: newGroupName, user_id: session.user.id }])
       .select()
       
-    if (!error) {
+    if (error) {
+      alert('Error creando sala: ' + error.message)
+    } else {
       setGroups([data[0], ...groups])
       setCurrentGroupId(data[0].id)
       setNewGroupName('')
@@ -122,7 +124,9 @@ function App() {
   async function addFriend(name) {
     if (!name || !currentGroupId) return
     const { data, error } = await supabase.from('friends').insert([{ name, group_id: currentGroupId }]).select()
-    if (!error) {
+    if (error) {
+      alert('Error añadiendo amigo: ' + error.message)
+    } else {
       setFriends([...friends, ...data])
     }
   }
@@ -164,7 +168,8 @@ function App() {
       .select()
 
     if (expError) {
-      alert('Error creando gasto')
+      alert('Error creando gasto: ' + expError.message + ' (Código: ' + expError.code + ')')
+      console.error(expError)
       return
     }
 
@@ -180,7 +185,8 @@ function App() {
     const { error: splitError } = await supabase.from('expense_splits').insert(splits)
 
     if (splitError) {
-      alert('Error creando repartición')
+      alert('Error creando repartición: ' + splitError.message)
+      console.error(splitError)
     } else {
       setShowAddExpense(false)
       setNewExpense({ description: '', amount: '', paid_by: '', category: 'Otros', split_with: [] })
