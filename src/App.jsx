@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight, LogOut, Utensils, Car, Home, Beer, ShoppingBag, Tag, Download, PieChart as PieChartIcon } from 'lucide-react'
+import { Plus, Users, History, Calculator, Receipt, Trash2, Layout, Calendar, ChevronRight, LogOut, Utensils, Car, Home, Beer, ShoppingBag, Tag, Download, PieChart as PieChartIcon, Edit3 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import { supabase } from './lib/supabase'
 import Auth from './components/Auth'
@@ -41,6 +41,8 @@ function App() {
     category: 'Otros',
     split_with: []
   })
+  const [editingExpense, setEditingExpense] = useState(null)
+  const [payments, setPayments] = useState([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -75,15 +77,22 @@ function App() {
     if (currentGroupId) {
       const { data: friendsData } = await supabase.from('friends').select('*').eq('group_id', currentGroupId)
       const { data: expensesData } = await supabase.from('expenses')
-        .select('*, paid_by(name)')
+        .select('*, paid_by(id, name)')
         .eq('group_id', currentGroupId)
         .order('created_at', { ascending: false })
       
+      const { data: paymentsData } = await supabase.from('payments')
+        .select('*, from_id(id, name), to_id(id, name)')
+        .eq('group_id', currentGroupId)
+        .order('created_at', { ascending: false })
+
       setFriends(friendsData || [])
       setExpenses(expensesData || [])
+      setPayments(paymentsData || [])
     } else {
       setFriends([])
       setExpenses([])
+      setPayments([])
     }
     setLoading(false)
   }
@@ -156,26 +165,48 @@ function App() {
       return
     }
 
-    const { data: expenseData, error: expError } = await supabase
-      .from('expenses')
-      .insert([{ 
-        description, 
-        amount: parseFloat(amount), 
-        paid_by, 
-        category,
-        group_id: currentGroupId 
-      }])
-      .select()
+    let expenseId;
+    if (editingExpense) {
+      // Actualizar gasto existente
+      const { error: expError } = await supabase
+        .from('expenses')
+        .update({ 
+          description, 
+          amount: parseFloat(amount), 
+          paid_by, 
+          category 
+        })
+        .eq('id', editingExpense.id)
 
-    if (expError) {
-      alert('Error creando gasto: ' + expError.message + ' (Código: ' + expError.code + ')')
-      console.error(expError)
-      return
+      if (expError) {
+        alert('Error editando gasto: ' + expError.message)
+        return
+      }
+      
+      expenseId = editingExpense.id
+      // Eliminar reparticiones antiguas
+      await supabase.from('expense_splits').delete().eq('expense_id', expenseId)
+    } else {
+      // Crear nuevo gasto
+      const { data: expenseData, error: expError } = await supabase
+        .from('expenses')
+        .insert([{ 
+          description, 
+          amount: parseFloat(amount), 
+          paid_by, 
+          category,
+          group_id: currentGroupId 
+        }])
+        .select()
+
+      if (expError) {
+        alert('Error creando gasto: ' + expError.message)
+        return
+      }
+      expenseId = expenseData[0].id
     }
 
-    const expenseId = expenseData[0].id
     const splitAmount = parseFloat(amount) / split_with.length
-
     const splits = split_with.map(friendId => ({
       expense_id: expenseId,
       friend_id: friendId,
@@ -186,10 +217,46 @@ function App() {
 
     if (splitError) {
       alert('Error creando repartición: ' + splitError.message)
-      console.error(splitError)
     } else {
       setShowAddExpense(false)
+      setEditingExpense(null)
       setNewExpense({ description: '', amount: '', paid_by: '', category: 'Otros', split_with: [] })
+      fetchData()
+    }
+  }
+
+  async function handleEditClick(exp) {
+    // Obtener las reparticiones actuales para este gasto
+    const { data: splits } = await supabase.from('expense_splits').select('friend_id').eq('expense_id', exp.id)
+    const splitWithIds = splits?.map(s => s.friend_id) || []
+    
+    setEditingExpense(exp)
+    setNewExpense({
+      description: exp.description,
+      amount: exp.amount.toString(),
+      paid_by: exp.paid_by?.id || exp.paid_by,
+      category: exp.category || 'Otros',
+      split_with: splitWithIds
+    })
+    setShowAddExpense(true)
+  }
+
+  async function handleSettleDebt(fromName, toName, amount) {
+    const fromFriend = friends.find(f => f.name === fromName)
+    const toFriend = friends.find(f => f.name === toName)
+    
+    if (!fromFriend || !toFriend) return
+
+    const { error } = await supabase.from('payments').insert([{
+      group_id: currentGroupId,
+      from_id: fromFriend.id,
+      to_id: toFriend.id,
+      amount: parseFloat(amount)
+    }])
+
+    if (error) {
+      alert('Error registrando pago: ' + error.message)
+    } else {
       fetchData()
     }
   }
@@ -259,6 +326,15 @@ function App() {
       if (balances[split.friend_id]) {
         balances[split.friend_id].amount -= parseFloat(split.amount)
       }
+    })
+
+    // Añadir lógica de pagos (liquidaciones)
+    payments.forEach(pay => {
+      const fromId = pay.from_id?.id || pay.from_id
+      const toId = pay.to_id?.id || pay.to_id
+      
+      if (balances[fromId]) balances[fromId].amount += parseFloat(pay.amount)
+      if (balances[toId]) balances[toId].amount -= parseFloat(pay.amount)
     })
 
     return Object.values(balances)
@@ -437,17 +513,45 @@ function App() {
                       <Calendar size={12} /> {formatDate(exp.created_at)} • Pagado por: {exp.paid_by?.name || 'Desconocido'}
                     </p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div className="amount">${exp.amount}</div>
                     <button 
+                      onClick={() => handleEditClick(exp)}
+                      className="btn-icon"
+                      title="Editar"
+                    >
+                      <Edit3 size={16} /> 
+                    </button>
+                    <button 
                       onClick={() => deleteExpense(exp.id)}
-                      style={{ background: 'transparent', color: 'var(--text-muted)', padding: '0.2rem' }}
+                      className="btn-icon"
+                      title="Eliminar"
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
               ))
+            )}
+
+            {payments.length > 0 && (
+              <>
+                <h3 style={{ marginTop: '2rem', marginBottom: '1rem', fontSize: '1rem', opacity: 0.7 }}>Pagos y Liquidaciones</h3>
+                {payments.map(pay => (
+                  <div key={pay.id} className="expense-item animate-fade" style={{ borderLeft: '4px solid #6BCB77', opacity: 0.8 }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(107, 203, 119, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '1rem' }}>
+                      <Calculator size={16} color="#6BCB77" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <strong>Pago de deuda</strong>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {pay.from_id?.name} → {pay.to_id?.name} • {formatDate(pay.created_at)}
+                      </p>
+                    </div>
+                    <div className="amount" style={{ color: '#6BCB77' }}>${pay.amount}</div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
 
@@ -463,7 +567,16 @@ function App() {
                   <div style={{ flex: 1 }}>
                     <strong>{s.from}</strong> <span style={{ color: 'var(--text-muted)' }}>debe pagar a</span> <strong>{s.to}</strong>
                   </div>
-                  <div className="amount" style={{ color: '#4D96FF' }}>${s.amount.toFixed(2)}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div className="amount" style={{ color: '#4D96FF' }}>${s.amount.toFixed(2)}</div>
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+                      onClick={() => handleSettleDebt(s.from, s.to, s.amount)}
+                    >
+                      Saldar
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -507,7 +620,7 @@ function App() {
       {showAddExpense && (
         <div className="modal-overlay">
           <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
-            <h2 style={{ marginBottom: '1.5rem' }}>Agregar Gasto</h2>
+            <h2 style={{ marginBottom: '1.5rem' }}>{editingExpense ? 'Editar Gasto' : 'Agregar Gasto'}</h2>
             <form onSubmit={handleAddExpense}>
               <div className="input-group">
                 <label>Descripción</label>
@@ -587,8 +700,10 @@ function App() {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Guardar</button>
-                <button type="button" onClick={() => setShowAddExpense(false)} className="btn-secondary" style={{ flex: 1 }}>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>
+                  {editingExpense ? 'Guardar Cambios' : 'Guardar'}
+                </button>
+                <button type="button" onClick={() => { setShowAddExpense(false); setEditingExpense(null); }} className="btn-secondary" style={{ flex: 1 }}>
                   Cancelar
                 </button>
               </div>

@@ -60,3 +60,21 @@ CREATE POLICY "Manage splits in own groups" ON expense_splits FOR ALL USING (
         WHERE expenses.id = expense_splits.expense_id AND groups.user_id = auth.uid()
     )
 );
+
+-- Crear tabla de pagos (liquidaciones)
+CREATE TABLE payments (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+    from_id UUID REFERENCES friends(id) ON DELETE CASCADE,
+    to_id UUID REFERENCES friends(id) ON DELETE CASCADE,
+    amount DECIMAL(10, 2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Habilitar RLS en payments
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+-- Políticas para payments: El usuario puede gestionar pagos de sus grupos
+CREATE POLICY "Manage payments in own groups" ON payments FOR ALL USING (
+    EXISTS (SELECT 1 FROM groups WHERE groups.id = payments.group_id AND groups.user_id = auth.uid())
+);
